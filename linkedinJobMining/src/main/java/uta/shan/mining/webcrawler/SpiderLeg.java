@@ -12,6 +12,12 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import java.net.URL;
+import java.net.URLConnection;
+import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+
 public class SpiderLeg {
 	private List<String> urls=new ArrayList<>();
 	private Document htmlDocument;
@@ -21,43 +27,42 @@ public class SpiderLeg {
 	public List<String> getUrl(){
 		return urls;
 	}
-	
-	//crawl this page
-	public List<Result> crawl(String url,String linkPattern,String pattern_to_search){
+
+	//retrieve source from remote url
+	public String retrieve(String url){
 		try{
 			Connection connection=Jsoup.connect(url).userAgent(USER_AGENT);
 			this.htmlDocument=connection.get();
-			System.out.println("received a page from: "+url);
+			System.out.println("retrieve page from:  "+url);
 		} catch(Exception e){
-			return  null;
+			e.printStackTrace();
 		}
 		if(this.htmlDocument==null){
 			System.out.println("page is null");
 			return null;
 		}
-		this.urls=this.searchForLinks(linkPattern);
-		return this.seasrchForPattern(pattern_to_search);
+		return this.htmlDocument.html();
 	}
-
-	public List<String> searchForLinks(String linkPattern){
-		Pattern p=Pattern.compile(linkPattern);
-		Matcher matcher = p.matcher(this.htmlDocument.body().text());
+		
+	//crawl this page for all job urls
+	public List<String> searchCurrJobs(String url,String linkPattern){
+		String source=this.retrieve(url);
 		List<String> links=new ArrayList<>();
-		while(matcher.find()){
-			links.add(matcher.group(0));
-			System.out.println("links..."+matcher.group(0));
+		Pattern p=Pattern.compile(linkPattern);
+		Matcher m= p.matcher(source);
+		while(m.find()){
+			links.add(m.group(1));
 		}
 		return links;
 	}
-
-	public List<Result> seasrchForPattern(String pattern){
+	/**
+	public static List<String> seasrchForPattern(String pattern){
+		List<Result> res=new ArrayList<>();
 		if(this.htmlDocument==null){
 			System.err.println("Error! crawl first befor search.");
-			return null;
+			return res;
 		}
 		Pattern p=Pattern.compile(pattern);
-		List<Result> res=new ArrayList<>();
-		String bodyText=this.htmlDocument.body().text();
 		Matcher matcher = p.matcher(bodyText);
 		while(matcher.find()){
 			Result result=new Result(matcher.group());
@@ -65,5 +70,27 @@ public class SpiderLeg {
 			res.add(result);
 		}
 		return res;
+	}
+*/
+	//search for a particular job info
+	public Result findJobInfo(String url,String regex){
+		Result result=null;
+		String source=this.retrieve(url);
+		Pattern p=Pattern.compile(regex);
+		Matcher m=p.matcher(source);
+		if(m.find()){
+			System.out.println(m.group(1)+"..."+m.group(2));
+			result=new Result(url,m.group(1),m.group(4),m.group(6),m.group(7),m.group(5),m.group(3),Integer.parseInt(m.group(2)));
+		}
+		return result;
+	}
+
+	//find next page url
+	public String searchNextPage(String url,String nextPattern){
+		String source=this.retrieve(url);
+		Pattern p=Pattern.compile(nextPattern);
+		Matcher m=p.matcher(source);
+		if(m.find()) return m.group(1);
+		else return "";
 	}
 }

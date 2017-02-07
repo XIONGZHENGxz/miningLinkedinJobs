@@ -18,52 +18,56 @@ import com.mysql.jdbc.jdbc2.optional.MysqlConnectionPoolDataSource;
 
 public class DataBase{
 	//use data source 
-	private String property_path;
-	private String name;
-	private Properties props;
-	private List<String> tables;
-	public DataBase(String path,String name,List<String> tabs){
+	public  String property_path;
+	public  String name;
+	public  Properties props;
+	public  String table;
+	public  String fields;
+	public DataBase(String path,String name,String table,String fields){
 		this.property_path=path;
 		this.name=name;
-		this.tables=tabs;
+		this.getProps();
+		this.table=table;
+		this.fields=fields;
+		this.createDB();
 	}
-	public Properties  getProps(String file){
+	public void getProps(){
 		props=new Properties();
 		try{
-			FileInputStream fis=new FileInputStream(file);
+			FileInputStream fis=new FileInputStream(this.property_path);
 			props.load(fis);
 		} catch(FileNotFoundException e){
 			e.printStackTrace();
 		} catch(IOException ex){
 			ex.printStackTrace();
 		}
-		return props;
 	}
 		
 	public MysqlDataSource getDataSource(){
 		MysqlDataSource mds=null;
-		try{
-			mds=new MysqlConnectionPoolDataSource();
-			mds.setURL(props.getProperty("db.url"));
-			mds.setUser(props.getProperty("db.user"));
-			mds.setPassword(props.getProperty("db.password"));
-		} catch(IOException ex){
-			ex.printStackTrace();
-		}
+		mds=new MysqlConnectionPoolDataSource();
+		mds.setURL(props.getProperty("db.url"));
+		mds.setUser(props.getProperty("db.user"));
+		mds.setPassword(props.getProperty("db.password"));
 		return mds;
 	}
 	
 	//create a database
-	public void CreateDB(){
+	public void createDB(){
 		Connection con=null;
 		PreparedStatement st=null;
 		try{
 			MysqlDataSource mds=getDataSource();
-			con=mds.getConnection();
-			String query="CREATE DATABASE "+this.name;
-			st=con.prepareStatement();
-			st.executeQuery();
-			this.props.setProperty("db.url",props.getProperty("db.url")+this.name);
+			mds.setURL(mds.getURL()+"?useSSL=false");
+			con=mds.getConnection();	
+			String query="CREATE DATABASE IF NOT EXISTS "+this.name;
+			st=con.prepareStatement(query);
+			st.execute();
+			st=con.prepareStatement("USE "+this.name);
+			st.execute();
+			st=con.prepareStatement("CREATE TABLE IF NOT EXISTS "+this.table+this.fields);
+			st.execute();
+			this.props.setProperty("db.url",props.getProperty("db.url")+"/"+this.name+"?useSSL=false");
 		} catch(Exception e){
 			Logger logger=Logger.getLogger(DataBase.class.getName());
 			logger.log(Level.SEVERE,e.getMessage(),e);
@@ -87,7 +91,7 @@ public class DataBase{
 			MysqlDataSource mds=this.getDataSource();
 			con=mds.getConnection();
 			for(String q:query){
-				st=con.prepareStatement();
+				st=con.prepareStatement(q);
 				rs.add(st.executeQuery());
 			}
 		} catch(Exception e){
@@ -105,6 +109,27 @@ public class DataBase{
 		return rs;
 	}
 
+	//insert records
+	public void insert(String statement){
+		Connection con=null;
+		PreparedStatement pst=null;
+		try{
+			MysqlDataSource mds=this.getDataSource();
+			con=mds.getConnection();
+			pst=con.prepareStatement(statement);
+			pst.execute();
+		} catch(Exception e){
+			Logger logger=Logger.getLogger(DataBase.class.getName());
+			logger.log(Level.SEVERE,e.getMessage(),e);
+		} finally{
+			try{	
+				if(con!=null) con.close();
+				if(pst!=null) pst.close();
+			} catch(SQLException e){
+				e.printStackTrace();
+			}
+		}
+	}
 	//execute query 
 	public ResultSet ExecuteQuery(String query){
 		Connection con=null;
@@ -129,6 +154,28 @@ public class DataBase{
 			}
 		}
 		return rs;
+	}
+
+
+	//drop a database
+	public void drop(){
+		MysqlDataSource mds=this.getDataSource();
+		PreparedStatement pst=null;
+		Connection con=null;
+		try{
+			con=mds.getConnection();
+			pst=con.prepareStatement("DROP DATABASE "+this.name);
+			pst.execute();
+		} catch(Exception e){
+			e.printStackTrace();
+		} finally{
+			try{
+				if(con!=null) con.close();
+				if(pst!=null) pst.close();
+			}catch(Exception e){
+				e.printStackTrace();
+			}
+		}
 	}
 
 	//execute a transaction 
@@ -157,19 +204,6 @@ public class DataBase{
 			}
 		}
 	}
-	
-	//create tables
-	public void CreateTables(){
-		for(String table:this.tables){
-			this.ExecuteQuery("CREATE TABLE"+table);
-		}
-	}
 
-	//build database 
-	public void BuildDB(String table,List<String> records){
-		for(String record:records){
-			this.ExecuteQuery("INSERT INTO "+table +record);
-		}
-	}
 }
 
